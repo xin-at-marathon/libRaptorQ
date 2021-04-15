@@ -28,8 +28,6 @@
 #include <stdlib.h>
 #include <vector>
 
-#include "./fec.c"
-
 // Demonstration of how to use the C++ RAW interface
 // it's pretty simple, we generate some input,
 // then encode, drop some packets (source and repair)
@@ -350,59 +348,6 @@ bool test_rq (const uint32_t mysize, std::mt19937_64 &rnd,
     return true;
 }
 
-bool test_vdm (const uint32_t block_size,
-               const uint16_t symbol_size,
-               std::mt19937_64 &rnd,
-               float drop_probability,
-               const uint8_t overhead);
-
-bool test_vdm (const uint32_t block_size,
-               const uint16_t symbol_size,
-               std::mt19937_64 &rnd,
-               float drop_probability,
-               const uint8_t overhead){
-    uint32_t mysize = block_size * symbol_size;
-    // the actual input.
-    std::vector<uint8_t> input;
-    input.reserve (mysize);
-
-    // initialize vector with random data
-    // distr should be "uint8_t". But visual studio does not like it, so
-    // we use uint16_t
-    // generate a random distribution between all values of uint8_t
-    std::uniform_int_distribution<int16_t> distr (0,
-                                          std::numeric_limits<uint8_t>::max());
-
-    // fill our input with random data
-    for (size_t idx = 0; idx < mysize; ++idx) {
-        input.push_back (static_cast<uint8_t> (distr(rnd)));
-    }
-
-    std::cout << "block size: " << block_size << ", symbol size: " << symbol_size << "\n";
-
-
-    struct fec_parms *code;
-    int *ixs;
-    int k = block_size;
-    int n = block_size + 48/2;
-
-    code = fec_new(k, n);
-	ixs = (int*)my_malloc(k * sizeof(int), "malloc ixs");
-
-    // encode
-    for(int i=0;i<overhead;i++){
-        fec_encode(code, input.data(), repairs, index[i], symbol_size);
-    }
-    
-    // decode
-    
-	free(ixs);
-	fec_free(code);
-    
-    return true;
-}
-
-
 int main (void)
 {
     // get a random number generator
@@ -413,14 +358,18 @@ int main (void)
     rand.close ();
     rnd.seed (seed);
 
-    uint32_t group_size = 100;
-    uint16_t symbol_size = 1380;
+    // keep some computation in memory. If you use only one block size it
+    // will make things faster on bigger block size.
+    // allocate 5Mb
+    RaptorQ__v1::local_cache_size (5000000);
 
-    if (!test_vdm (group_size, symbol_size,
-                   rnd,
-                   20.0, 7))
+    // for our test, we use an input of random size, between 100 and 10.000
+    // bytes.
+    std::uniform_int_distribution<uint32_t> distr(100, 10000);
+    uint32_t input_size = distr (rnd);
+
+    if (!test_rq (input_size, rnd, 20.0, 4))
         return -1;
-
     std::cout << "The example completed successfully\n";
     return 0;
 }
